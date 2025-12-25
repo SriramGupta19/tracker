@@ -71,6 +71,7 @@
             background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
             color: white; text-align: center; padding: 25px; border-radius: 16px; margin-bottom: 15px; 
             box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+            position: relative;
         }
         
         .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
@@ -169,7 +170,11 @@
         <div class="sidebar-section">
             <div class="bank-card">
                 <div style="opacity:0.8; font-size:0.8rem; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600;">CURRENT BALANCE</div>
-                <div style="font-size: 2.5rem; font-weight: 800;">₹<span id="bank-balance">--</span></div>
+                
+                <div style="font-size: 2.5rem; font-weight: 800; display:flex; align-items:center; justify-content:center; gap:10px;">
+                    ₹<span id="bank-balance">--</span>
+                    <button id="edit-balance-btn" title="Set Current Balance" style="background:rgba(255,255,255,0.2); border:none; border-radius:50%; width:32px; height:32px; cursor:pointer; color:white; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:0.2s;">✏️</button>
+                </div>
             </div>
 
             <div class="stats-grid">
@@ -274,6 +279,9 @@
     const INITIAL_BALANCE = 1616.96;
     let globalItems = [];
     let historyLimit = 5; // Default Limit
+    
+    // Global variable to hold current calculated balance for the edit feature
+    let currentCalculatedBalance = 0;
 
     // Set Date Picker to Today
     document.getElementById('date-picker').valueAsDate = new Date();
@@ -363,14 +371,18 @@
                 if(i.debtType === 'borrowed') balance += i.amount; 
                 if(i.debtType === 'lent' && i.method === 'UPI') balance -= i.amount; 
             }
+            // Logic for "Balance Correction" (It's typically logged as Income or Expense with 'Adjustment' cat)
             
             if(i.type === 'expense') {
                 if(i.method === 'UPI') upi += i.amount;
                 if(i.method === 'Card') card += i.amount;
-                if(i.dateObj >= startMonth) month += i.amount;
-                if(i.dateObj >= startWeek) week += i.amount;
+                if(i.dateObj >= startMonth && i.category !== 'Adjustment') month += i.amount;
+                if(i.dateObj >= startWeek && i.category !== 'Adjustment') week += i.amount;
             }
         });
+
+        // Store for Edit Feature
+        currentCalculatedBalance = balance;
 
         document.getElementById('bank-balance').innerText = balance.toLocaleString('en-IN');
         document.getElementById('week-amount').innerText = week.toLocaleString('en-IN');
@@ -378,6 +390,35 @@
         document.getElementById('upi-total').innerText = upi.toLocaleString('en-IN');
         document.getElementById('card-total').innerText = card.toLocaleString('en-IN');
     }
+
+    // --- NEW: EDIT BALANCE FEATURE ---
+    document.getElementById('edit-balance-btn').addEventListener('click', async () => {
+        const userInput = prompt("Enter your ACTUAL current bank balance:", currentCalculatedBalance);
+        
+        if (userInput !== null && !isNaN(parseFloat(userInput))) {
+            const newBalance = parseFloat(userInput);
+            const difference = newBalance - currentCalculatedBalance;
+            
+            if (difference === 0) return alert("Balance is already correct!");
+
+            const type = difference > 0 ? 'income' : 'expense';
+            const amount = Math.abs(difference);
+
+            await addDoc(expensesCollection, {
+                uid: auth.currentUser.uid, 
+                type: type, 
+                description: 'Balance Correction', 
+                amount: amount, 
+                category: 'Adjustment',
+                method: 'Other', 
+                debtType: null, 
+                deduct: true,
+                date: Timestamp.now(), 
+                dateString: new Date().toISOString().split('T')[0] 
+            });
+            alert("Balance updated! A 'Balance Correction' transaction has been added.");
+        }
+    });
 
     document.getElementById('action-btn').addEventListener('click', async () => {
         const desc = document.getElementById('desc').value;
