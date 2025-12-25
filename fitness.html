@@ -75,9 +75,9 @@
             transition: transform 0.2s;
         }
 
-        /* --- QUICK STATS BAR --- */
+        /* --- QUICK STATS BAR (UPDATED FOR 4 COLS) --- */
         .stats-bar {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;
         }
         .mini-stat {
             background: linear-gradient(135deg, var(--card) 0%, var(--input-bg) 100%);
@@ -92,7 +92,6 @@
         .heatmap-container {
             display: flex; justify-content: center; overflow-x: auto; padding-bottom: 10px; width: 100%;
         }
-        @media (max-width: 900px) { .heatmap-container { justify-content: flex-start; } }
         
         .heatmap-grid {
             display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; gap: 4px; flex-shrink: 0;
@@ -164,6 +163,9 @@
             .charts-container { grid-template-columns: 1fr; } 
             .weight-chart-box { grid-column: span 1; }
             .chip-grid { grid-template-columns: repeat(3, 1fr); }
+            /* New: Break stats into 2x2 grid on mobile */
+            .stats-bar { grid-template-columns: repeat(2, 1fr); }
+            .heatmap-container { justify-content: flex-start; }
         }
 
         /* --- LIST --- */
@@ -199,6 +201,10 @@
         <div class="mini-stat">
             <div class="mini-label">Current Streak</div>
             <div class="mini-val"><span id="streak-val">0</span> <span class="streak-fire">🔥</span></div>
+        </div>
+        <div class="mini-stat">
+            <div class="mini-label">Current BMI</div>
+            <div class="mini-val" id="bmi-val" style="color:var(--primary); font-size:1.3rem;">--</div>
         </div>
         <div class="mini-stat">
             <div class="mini-label">This Month</div>
@@ -243,9 +249,8 @@
             <label for="loc-rest" class="loc-label">💤 Rest</label>
         </div>
 
-        <div style="position:relative; margin-bottom:15px;">
-            <input type="number" id="weight" placeholder="⚖️ Body Weight (kg)" step="0.1" oninput="calcBMI()">
-            <span id="bmi-badge" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:0.8rem; font-weight:700; padding:4px 8px; border-radius:6px; display:none;"></span>
+        <div style="margin-bottom:15px;">
+            <input type="number" id="weight" placeholder="⚖️ Body Weight (kg) - Optional" step="0.1">
         </div>
 
         <div style="font-size:0.8rem; margin-bottom:8px; color:var(--text-secondary); font-weight:600; text-transform:uppercase;">Focus Area</div>
@@ -296,7 +301,7 @@
       messagingSenderId: "901288643060",
       appId: "1:901288643060:web:5ca6fbc4dd6fa4b6c851a1"
     };
-    
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
@@ -319,7 +324,7 @@
             const items = [];
             snap.forEach(d => items.push({ id: d.id, ...d.data(), dateObj: d.data().date.toDate() }));
             
-            // Sort: Newest first for list, Oldest first for calculation logic if needed
+            // Sort: Newest first
             items.sort((a,b) => b.dateObj - a.dateObj); 
             
             updateUI(items);
@@ -329,80 +334,73 @@
         });
     }
 
-    // --- NEW: STREAK & STATS LOGIC ---
     function calculateStats(items) {
         const gymItems = items.filter(i => i.location === 'Gym');
         
         // 1. Total Workouts
         document.getElementById('total-val').innerText = gymItems.length;
 
-        // 2. This Month Count
+        // 2. This Month
         const currentMonth = new Date().getMonth();
         const currentYear = new Date().getFullYear();
         const monthCount = gymItems.filter(i => i.dateObj.getMonth() === currentMonth && i.dateObj.getFullYear() === currentYear).length;
         document.getElementById('month-val').innerText = monthCount;
 
-        // 3. Streak Calculation
-        // Create a set of unique dates (YYYY-MM-DD)
+        // 3. Streak Logic
         const uniqueDates = [...new Set(gymItems.map(i => i.dateString))].sort().reverse();
-        
         let streak = 0;
         if(uniqueDates.length > 0) {
             const today = new Date().toISOString().split('T')[0];
             const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-            
-            // Check if streak is alive (Did we go today or yesterday?)
             if(uniqueDates[0] === today || uniqueDates[0] === yesterday) {
                 streak = 1;
                 for(let i = 0; i < uniqueDates.length - 1; i++) {
                     const d1 = new Date(uniqueDates[i]);
                     const d2 = new Date(uniqueDates[i+1]);
-                    const diffTime = Math.abs(d1 - d2);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                    
-                    if(diffDays === 1) {
-                        streak++;
-                    } else {
-                        break;
-                    }
+                    if(Math.ceil(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24)) === 1) streak++; else break;
                 }
             }
         }
         document.getElementById('streak-val').innerText = streak;
+
+        // 4. NEW: BMI Calculation (Based on last history entry)
+        const lastWeightEntry = items.find(i => i.weight > 0);
+        const bmiBox = document.getElementById('bmi-val');
+        
+        if(lastWeightEntry) {
+            // !!! SET YOUR HEIGHT HERE (Meters) !!!
+            const userHeight = 1.82; 
+
+            const bmi = (lastWeightEntry.weight / (userHeight * userHeight)).toFixed(1);
+            bmiBox.innerText = bmi;
+            
+            // Color Coding
+            if(bmi < 18.5) bmiBox.style.color = '#f59e0b'; // Underweight
+            else if(bmi < 25) bmiBox.style.color = '#10b981'; // Normal
+            else bmiBox.style.color = '#ef4444'; // Overweight
+        } else {
+            bmiBox.innerText = '--';
+        }
     }
 
-    // --- HEATMAP ---
+    // --- HEATMAP & CHARTING (Same as before) ---
     function renderHeatmap(items) {
-        const grid = document.getElementById('heatmap');
-        grid.innerHTML = '';
-        
+        const grid = document.getElementById('heatmap'); grid.innerHTML = '';
         const activityMap = {};
-        items.forEach(i => {
-            if(i.location === 'Gym') activityMap[i.dateString] = (activityMap[i.dateString] || 0) + 1;
-        });
+        items.forEach(i => { if(i.location === 'Gym') activityMap[i.dateString] = (activityMap[i.dateString] || 0) + 1; });
 
         const today = new Date();
-        const startDate = new Date();
-        startDate.setDate(today.getDate() - 364);
-        const dayOfWeek = startDate.getDay(); 
-        startDate.setDate(startDate.getDate() - dayOfWeek);
+        const startDate = new Date(); startDate.setDate(today.getDate() - 364);
+        startDate.setDate(startDate.getDate() - startDate.getDay());
 
         for (let i = 0; i < 371; i++) {
-            const d = new Date(startDate);
-            d.setDate(startDate.getDate() + i);
-            // Use local date string logic to match inputs
+            const d = new Date(startDate); d.setDate(startDate.getDate() + i);
             const dateStr = d.toISOString().split('T')[0];
-            
             const count = activityMap[dateStr] || 0;
-            let level = 0;
-            if (count > 0) level = 1;
-            if (count > 1) level = 2; 
-            if (count > 2) level = 3;
+            let level = count > 2 ? 3 : (count > 1 ? 2 : (count > 0 ? 1 : 0));
 
             const sq = document.createElement('div');
-            sq.className = 'day-sq';
-            sq.dataset.level = level;
-            sq.dataset.date = `${dateStr}: ${count} sessions`;
+            sq.className = 'day-sq'; sq.dataset.level = level; sq.dataset.date = `${dateStr}: ${count}`;
             if(dateStr === new Date().toISOString().split('T')[0]) sq.style.border = "1px solid var(--primary)";
             grid.appendChild(sq);
         }
@@ -412,8 +410,7 @@
         const location = document.querySelector('input[name="location"]:checked').value;
         const weight = parseFloat(document.getElementById('weight').value) || 0;
         const time = document.getElementById('time-picker').value;
-        const selectedChips = document.querySelectorAll('.chip.active');
-        const muscles = Array.from(selectedChips).map(c => c.innerText);
+        const muscles = Array.from(document.querySelectorAll('.chip.active')).map(c => c.innerText);
         const dateVal = document.getElementById('date-picker').value;
 
         if(location !== 'Rest' && muscles.length === 0 && weight === 0) return alert("Enter details");
@@ -421,127 +418,44 @@
         await addDoc(workoutsCollection, {
             uid: auth.currentUser.uid, location, muscles, weight, time, 
             notes: document.getElementById('notes').value,
-            date: Timestamp.fromDate(new Date(dateVal)), // Correct sorting
-            dateString: dateVal
+            date: Timestamp.fromDate(new Date(dateVal)), dateString: dateVal
         });
 
-        document.getElementById('notes').value = '';
-        document.getElementById('weight').value = '';
-        document.getElementById('bmi-badge').style.display = 'none'; // Hide badge after submit
+        document.getElementById('notes').value = ''; document.getElementById('weight').value = '';
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     });
 
     function updateUI(items) {
-        const list = document.getElementById('workout-list');
-        list.innerHTML = '';
+        const list = document.getElementById('workout-list'); list.innerHTML = '';
         items.slice(0, 30).forEach(i => {
-            let locIcon = i.location === 'Rest' ? '💤' : '🏋️';
-            let tagsHtml = i.muscles ? i.muscles.map(m => `<span class="tag-pill">${m}</span>`).join('') : '';
-            if(i.location === 'Rest') tagsHtml = `<span class="tag-pill" style="color:var(--text-secondary); background:var(--input-bg);">Recovery</span>`;
-            
+            let tags = i.location === 'Rest' ? `<span class="tag-pill" style="color:var(--text-secondary);background:var(--input-bg)">Recovery</span>` : (i.muscles||[]).map(m=>`<span class="tag-pill">${m}</span>`).join('');
             const li = document.createElement('li');
             li.innerHTML = `
-                <div style="width:100%;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span class="gym-badge">${locIcon} ${i.location}</span>
-                        ${i.weight ? `<span class="weight-badge">⚖️ ${i.weight}kg</span>` : ''}
-                    </div>
-                    <small style="color:var(--text-secondary)">${i.dateObj.toLocaleDateString()} • ${convertTo12Hour(i.time || '00:00')}</small>
-                    <div style="margin-top:5px;">${tagsHtml}</div>
-                    ${i.notes ? `<small style="color:var(--text); display:block; margin-top:5px; font-style:italic;">"${i.notes}"</small>` : ''}
-                </div>
-                <button class="del-btn" data-id="${i.id}" style="border:none;background:none;cursor:pointer;color:var(--text-secondary); margin-left:10px;">&times;</button>
-            `;
+                <div style="width:100%"><div style="display:flex;justify-content:space-between;align-items:center;"><span class="gym-badge">${i.location==='Rest'?'💤':'🏋️'} ${i.location}</span>${i.weight?`<span class="weight-badge">⚖️ ${i.weight}kg</span>`:''}</div>
+                <small style="color:var(--text-secondary)">${i.dateObj.toLocaleDateString()} • ${convertTo12Hour(i.time||'00:00')}</small>
+                <div style="margin-top:5px">${tags}</div>${i.notes?`<small style="display:block;margin-top:5px;font-style:italic">"${i.notes}"</small>`:''}</div>
+                <button class="del-btn" data-id="${i.id}" style="border:none;background:none;cursor:pointer;color:var(--text-secondary);margin-left:10px;">&times;</button>`;
             list.appendChild(li);
         });
         document.querySelectorAll('.del-btn').forEach(b => b.addEventListener('click', e => deleteDoc(doc(db, "workouts", e.target.getAttribute('data-id')))));
     }
 
     function convertTo12Hour(time) {
-        let [h, m] = time.split(':');
-        let ampm = +h < 12 ? 'AM' : 'PM';
-        return `${(+h % 12 || 12)}:${m} ${ampm}`;
+        let [h, m] = time.split(':'); return `${(+h % 12 || 12)}:${m} ${+h < 12 ? 'AM' : 'PM'}`;
     }
 
     let muscleChart, consistChart, weightChart;
     function updateCharts(items) {
-        const muscleCounts = {};
-        const locCounts = { 'Gym': 0, 'Rest': 0 };
-        // Sort for Line Chart
+        const muscleCounts = {}; const locCounts = { 'Gym': 0, 'Rest': 0 };
         const weightData = items.filter(i => i.weight > 0).sort((a,b) => a.dateObj - b.dateObj).map(i => ({ x: i.dateString, y: i.weight }));
-
-        items.forEach(i => {
-            if(locCounts[i.location] !== undefined) locCounts[i.location]++;
-            if(i.muscles) i.muscles.forEach(m => muscleCounts[m] = (muscleCounts[m] || 0) + 1);
-        });
-
+        items.forEach(i => { if(locCounts[i.location]!==undefined)locCounts[i.location]++; (i.muscles||[]).forEach(m => muscleCounts[m] = (muscleCounts[m]||0)+1); });
+        
         if(muscleChart) muscleChart.destroy(); if(consistChart) consistChart.destroy(); if(weightChart) weightChart.destroy();
-
         const primaryColor = getComputedStyle(document.body).getPropertyValue('--primary').trim();
-        const textColor = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim();
-
-        // 1. Weight Chart (Full Width)
-        weightChart = new Chart(document.getElementById('weightChart'), { 
-            type: 'line', 
-            data: { 
-                labels: weightData.map(d => d.x.slice(5)), 
-                datasets: [{ label: 'Weight (kg)', data: weightData.map(d => d.y), borderColor: primaryColor, backgroundColor: 'rgba(14, 165, 233, 0.1)', fill: true, tension: 0.3 }] 
-            }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false }, title: { display: true, text: 'Weight Progress', color: textColor } }, 
-                scales: { y: { beginAtZero: false, ticks: { color: textColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } 
-            } 
-        });
         
-        // 2. Muscle Chart (Vertical Bar)
-        muscleChart = new Chart(document.getElementById('muscleChart'), { 
-            type: 'bar', 
-            data: { 
-                labels: Object.keys(muscleCounts), 
-                datasets: [{ label: 'Sessions', data: Object.values(muscleCounts), backgroundColor: primaryColor, borderRadius: 6 }] 
-            }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false }, title: { display: true, text: 'Focus Area', color: textColor } }, 
-                scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: textColor } }, x: { ticks: { color: textColor }, grid: { display: false } } } 
-            } 
-        });
-        
-        // 3. Consistency (Pie)
-        consistChart = new Chart(document.getElementById('consistChart'), { 
-            type: 'doughnut', 
-            data: { labels: ['Gym', 'Rest'], datasets: [{ data: [locCounts.Gym, locCounts.Rest], backgroundColor: [primaryColor, '#94a3b8'], borderWidth: 0 }] }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { color: textColor, padding: 20 } }, title: { display: true, text: 'Consistency', color: textColor } } 
-            } 
-        });
-    }
-
-    // --- NEW: BMI LOGIC ---
-    window.calcBMI = () => {
-        const weight = parseFloat(document.getElementById('weight').value);
-        // !!! IMPORTANT: CHANGE THIS TO YOUR HEIGHT IN METERS !!!
-        const heightM = 1.82; 
-        
-        const badge = document.getElementById('bmi-badge');
-        
-        if(weight > 0) {
-            const bmi = (weight / (heightM * heightM)).toFixed(1);
-            let label = 'Normal', color = '#10b981', bg = 'rgba(16, 185, 129, 0.1)';
-            
-            if(bmi < 18.5) { label='Underweight'; color='#f59e0b'; bg='rgba(245, 158, 11, 0.1)'; }
-            if(bmi >= 25) { label='Overweight'; color='#f59e0b'; bg='rgba(245, 158, 11, 0.1)'; }
-            if(bmi >= 30) { label='Obese'; color='#ef4444'; bg='rgba(239, 68, 68, 0.1)'; }
-
-            badge.style.display = 'block';
-            badge.style.color = color;
-            badge.style.background = bg;
-            badge.innerText = `BMI: ${bmi} (${label})`;
-        } else {
-            badge.style.display = 'none';
-        }
+        weightChart = new Chart(document.getElementById('weightChart'), { type: 'line', data: { labels: weightData.map(d => d.x.slice(5)), datasets: [{ label: 'Weight', data: weightData.map(d => d.y), borderColor: primaryColor, backgroundColor: 'rgba(14, 165, 233, 0.1)', fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Weight Progress' }}, scales: { x: { grid: { display: false } } } } });
+        muscleChart = new Chart(document.getElementById('muscleChart'), { type: 'bar', data: { labels: Object.keys(muscleCounts), datasets: [{ label: 'Sessions', data: Object.values(muscleCounts), backgroundColor: primaryColor, borderRadius: 6 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, title: { display: true, text: 'Focus Area' } }, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, ticks: { stepSize: 1 } } } } });
+        consistChart = new Chart(document.getElementById('consistChart'), { type: 'doughnut', data: { labels: ['Gym', 'Rest'], datasets: [{ data: [locCounts.Gym, locCounts.Rest], backgroundColor: [primaryColor, '#94a3b8'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Consistency' } } } });
     }
 </script>
 </body>
