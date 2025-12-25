@@ -243,8 +243,9 @@
             <label for="loc-rest" class="loc-label">💤 Rest</label>
         </div>
 
-        <div style="margin-bottom:15px;">
-            <input type="number" id="weight" placeholder="⚖️ Body Weight (kg) - Optional" step="0.1">
+        <div style="position:relative; margin-bottom:15px;">
+            <input type="number" id="weight" placeholder="⚖️ Body Weight (kg)" step="0.1" oninput="calcBMI()">
+            <span id="bmi-badge" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:0.8rem; font-weight:700; padding:4px 8px; border-radius:6px; display:none;"></span>
         </div>
 
         <div style="font-size:0.8rem; margin-bottom:8px; color:var(--text-secondary); font-weight:600; text-transform:uppercase;">Focus Area</div>
@@ -426,6 +427,7 @@
 
         document.getElementById('notes').value = '';
         document.getElementById('weight').value = '';
+        document.getElementById('bmi-badge').style.display = 'none'; // Hide badge after submit
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     });
 
@@ -515,6 +517,31 @@
                 plugins: { legend: { position: 'bottom', labels: { color: textColor, padding: 20 } }, title: { display: true, text: 'Consistency', color: textColor } } 
             } 
         });
+    }
+
+    // --- NEW: BMI LOGIC ---
+    window.calcBMI = () => {
+        const weight = parseFloat(document.getElementById('weight').value);
+        // !!! IMPORTANT: CHANGE THIS TO YOUR HEIGHT IN METERS !!!
+        const heightM = 1.82; 
+        
+        const badge = document.getElementById('bmi-badge');
+        
+        if(weight > 0) {
+            const bmi = (weight / (heightM * heightM)).toFixed(1);
+            let label = 'Normal', color = '#10b981', bg = 'rgba(16, 185, 129, 0.1)';
+            
+            if(bmi < 18.5) { label='Underweight'; color='#f59e0b'; bg='rgba(245, 158, 11, 0.1)'; }
+            if(bmi >= 25) { label='Overweight'; color='#f59e0b'; bg='rgba(245, 158, 11, 0.1)'; }
+            if(bmi >= 30) { label='Obese'; color='#ef4444'; bg='rgba(239, 68, 68, 0.1)'; }
+
+            badge.style.display = 'block';
+            badge.style.color = color;
+            badge.style.background = bg;
+            badge.innerText = `BMI: ${bmi} (${label})`;
+        } else {
+            badge.style.display = 'none';
+        }
     }
 </script>
 </body>
