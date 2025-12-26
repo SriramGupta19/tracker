@@ -75,7 +75,7 @@
             transition: transform 0.2s;
         }
 
-        /* --- QUICK STATS BAR (UPDATED FOR 4 COLS) --- */
+        /* --- QUICK STATS BAR --- */
         .stats-bar {
             display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;
         }
@@ -134,6 +134,9 @@
         .chip:hover { background: var(--border); }
         .chip.active { background: var(--primary); color: white; border-color: var(--primary); box-shadow: 0 2px 5px rgba(14, 165, 233, 0.2); }
 
+        /* Context Memory Animation */
+        @keyframes fadeIn { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:translateY(0); } }
+
         input { 
             width: 100%; padding: 14px; border: 1px solid var(--border); border-radius: 12px; outline: none; 
             background: var(--input-bg); color: var(--text); box-sizing: border-box; margin-bottom: 15px; font-size: 0.95rem;
@@ -163,7 +166,6 @@
             .charts-container { grid-template-columns: 1fr; } 
             .weight-chart-box { grid-column: span 1; }
             .chip-grid { grid-template-columns: repeat(3, 1fr); }
-            /* New: Break stats into 2x2 grid on mobile */
             .stats-bar { grid-template-columns: repeat(2, 1fr); }
             .heatmap-container { justify-content: flex-start; }
         }
@@ -194,7 +196,7 @@
     </div>
 
     <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-        <h2 style="margin:0; font-weight: 800;">Fitness </h2>
+        <h2 style="margin:0; font-weight: 800;">Fitness</h2>
         <button id="theme-btn" style="background:var(--card); border:1px solid var(--border); border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:1.2rem; display:flex; align-items:center; justify-content:center;">🌙</button>
     </div>
 
@@ -255,6 +257,7 @@
         </div>
 
         <div style="font-size:0.8rem; margin-bottom:8px; color:var(--text-secondary); font-weight:600; text-transform:uppercase;">Focus Area</div>
+        
         <div class="chip-grid" id="muscle-grid">
             <div class="chip" onclick="toggleChip(this)">Chest</div>
             <div class="chip" onclick="toggleChip(this)">Back</div>
@@ -264,6 +267,20 @@
             <div class="chip" onclick="toggleChip(this)">Legs</div>
             <div class="chip" onclick="toggleChip(this)">Abs</div>
             <div class="chip" onclick="toggleChip(this)">Cardio</div>
+        </div>
+
+        <div id="context-memory" style="
+            background: rgba(14, 165, 233, 0.1); 
+            border-left: 3px solid var(--primary); 
+            padding: 10px 15px; 
+            border-radius: 0 8px 8px 0; 
+            margin-bottom: 15px; 
+            font-size: 0.85rem; 
+            color: var(--text-secondary);
+            display: none; 
+            animation: fadeIn 0.3s ease;
+        ">
+            <strong style="color:var(--primary)">Last Time:</strong> <span id="memory-text">...</span>
         </div>
 
         <input type="text" id="notes" placeholder="Notes (e.g. Bench PR 80kg)">
@@ -308,12 +325,53 @@
     const auth = getAuth(app);
     const workoutsCollection = collection(db, "workouts");
 
+    // Global variable to store all workouts for "Contextual Memory"
+    let globalWorkouts = [];
+
     const now = new Date();
     document.getElementById('date-picker').valueAsDate = now;
     document.getElementById('time-picker').value = now.toTimeString().substring(0,5);
 
     document.getElementById('theme-btn').addEventListener('click', () => document.body.classList.toggle('dark-mode'));
-    window.toggleChip = (el) => { el.classList.toggle('active'); }
+
+    // --- NEW: SMART CHIP TOGGLE (Contextual Memory) ---
+    window.toggleChip = (el) => { 
+        // 1. Toggle Visuals
+        el.classList.toggle('active'); 
+        
+        // 2. Identify Selected Muscle
+        const muscle = el.innerText;
+        const isActive = el.classList.contains('active');
+        const box = document.getElementById('context-memory');
+        const text = document.getElementById('memory-text');
+
+        if (!isActive) {
+            // If turning off, check if other chips are active. If not, hide box.
+            const anyActive = document.querySelector('.chip.active');
+            if(!anyActive) box.style.display = 'none';
+            return;
+        }
+
+        // 3. Search History for this Muscle
+        // Find the most recent workout that includes this muscle
+        const lastLog = globalWorkouts.find(w => w.muscles && w.muscles.includes(muscle));
+
+        if (lastLog) {
+            // Format Date
+            const daysAgo = Math.floor((new Date() - lastLog.dateObj) / (1000 * 60 * 60 * 24));
+            const dateStr = daysAgo === 0 ? "Today" : `${daysAgo} days ago`;
+            
+            // Format Note
+            const noteContent = lastLog.notes ? `"${lastLog.notes}"` : "No notes logged.";
+            
+            // Show Hint
+            text.innerHTML = `${dateStr} &bull; ${noteContent} ${lastLog.weight ? `(${lastLog.weight}kg)` : ''}`;
+            box.style.display = 'block';
+        } else {
+            text.innerText = "No previous data found for " + muscle;
+            box.style.display = 'block';
+        }
+    }
 
     onAuthStateChanged(auth, user => {
         if(user) { loadWorkouts(user.uid); } 
@@ -327,6 +385,9 @@
             
             // Sort: Newest first
             items.sort((a,b) => b.dateObj - a.dateObj); 
+            
+            // Save to global for memory feature
+            globalWorkouts = items;
             
             updateUI(items);
             calculateStats(items);
@@ -364,7 +425,7 @@
         }
         document.getElementById('streak-val').innerText = streak;
 
-        // 4. NEW: BMI Calculation (Based on last history entry)
+        // 4. BMI Calculation
         const lastWeightEntry = items.find(i => i.weight > 0);
         const bmiBox = document.getElementById('bmi-val');
         
@@ -384,7 +445,7 @@
         }
     }
 
-    // --- HEATMAP & CHARTING (Same as before) ---
+    // --- HEATMAP & CHARTING ---
     function renderHeatmap(items) {
         const grid = document.getElementById('heatmap'); grid.innerHTML = '';
         const activityMap = {};
@@ -424,6 +485,7 @@
 
         document.getElementById('notes').value = ''; document.getElementById('weight').value = '';
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        document.getElementById('context-memory').style.display = 'none'; // Hide hint after submitting
     });
 
     function updateUI(items) {
