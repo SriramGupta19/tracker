@@ -185,17 +185,6 @@
                 <div class="stat-box"><div class="stat-label">Card Spend</div><div class="stat-val" style="color:#f59e0b;">₹<span id="card-total">0</span></div></div>
             </div>
 
-            <div class="card" style="padding:15px; margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; font-size:0.75rem; font-weight:700; color:var(--text-secondary); margin-bottom:5px;">
-                    <span>NECESSITIES (<span id="need-val">0%</span>)</span>
-                    <span>LIFESTYLE (<span id="want-val">0%</span>)</span>
-                </div>
-                <div style="width:100%; height:10px; background:var(--input-bg); border-radius:5px; overflow:hidden; display:flex;">
-                    <div id="need-bar" style="height:100%; background:var(--success); width:0%; transition:width 0.5s;"></div>
-                    <div id="want-bar" style="height:100%; background:var(--warning); width:0%; transition:width 0.5s;"></div>
-                </div>
-            </div>
-
             <div class="card">
                 <div class="tab-group">
                     <div class="tab active" data-mode="expense" onclick="switchTab('expense')">Expense</div>
@@ -227,16 +216,9 @@
                     </div>
                 </div>
 
-                <div id="deduct-wrapper">
-                    <div class="checkbox-wrapper">
-                        <input type="checkbox" id="essential-check">
-                        <label for="essential-check">⚡ Was this Essential? (Need vs Want)</label>
-                    </div>
-
-                    <div class="checkbox-wrapper">
-                        <input type="checkbox" id="deduct-check" checked>
-                        <label for="deduct-check">Deduct from Balance</label>
-                    </div>
+                <div id="deduct-wrapper" class="checkbox-wrapper">
+                    <input type="checkbox" id="deduct-check" checked>
+                    <label for="deduct-check">Deduct from Balance</label>
                 </div>
 
                 <button id="action-btn" class="add-btn btn-expense">Add Expense</button>
@@ -337,7 +319,7 @@
         
         if(mode === 'expense') { 
             btn.innerText = "Add Expense"; btn.classList.add('btn-expense'); 
-            cat.style.display='block'; debt.style.display='none'; deduct.style.display = 'block'; 
+            cat.style.display='block'; debt.style.display='none'; deduct.style.display = 'flex'; 
         }
         if(mode === 'income') { 
             btn.innerText = "Add Income"; btn.classList.add('btn-income'); 
@@ -378,10 +360,6 @@
         let balance = INITIAL_BALANCE;
         let month = 0, week = 0, upi = 0, card = 0;
         
-        // Need vs Want Vars
-        let needTotal = 0;
-        let wantTotal = 0;
-        
         const now = new Date();
         const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const startWeek = new Date(now);
@@ -395,16 +373,13 @@
                 if(i.debtType === 'borrowed') balance += i.amount; 
                 if(i.debtType === 'lent' && i.method === 'UPI') balance -= i.amount; 
             }
+            // Logic for "Balance Correction" (It's typically logged as Income or Expense with 'Adjustment' cat)
             
             if(i.type === 'expense') {
                 if(i.method === 'UPI') upi += i.amount;
                 if(i.method === 'Card') card += i.amount;
                 if(i.dateObj >= startMonth && i.category !== 'Adjustment') month += i.amount;
                 if(i.dateObj >= startWeek && i.category !== 'Adjustment') week += i.amount;
-                
-                // Need vs Want Logic
-                if (i.isEssential) needTotal += i.amount;
-                else wantTotal += i.amount;
             }
         });
 
@@ -416,24 +391,6 @@
         document.getElementById('month-amount').innerText = month.toLocaleString('en-IN');
         document.getElementById('upi-total').innerText = upi.toLocaleString('en-IN');
         document.getElementById('card-total').innerText = card.toLocaleString('en-IN');
-
-        // UPDATE 50/30/20 BAR
-        const totalSpend = needTotal + wantTotal;
-        if (totalSpend > 0) {
-            const needPct = (needTotal / totalSpend) * 100;
-            const wantPct = (wantTotal / totalSpend) * 100;
-            
-            document.getElementById('need-bar').style.width = needPct + '%';
-            document.getElementById('want-bar').style.width = wantPct + '%';
-            
-            document.getElementById('need-val').innerText = Math.round(needPct) + '%';
-            document.getElementById('want-val').innerText = Math.round(wantPct) + '%';
-        } else {
-            document.getElementById('need-bar').style.width = '0%';
-            document.getElementById('want-bar').style.width = '0%';
-            document.getElementById('need-val').innerText = '0%';
-            document.getElementById('want-val').innerText = '0%';
-        }
     }
 
     // --- NEW: EDIT BALANCE FEATURE ---
@@ -458,7 +415,6 @@
                 method: 'Other', 
                 debtType: null, 
                 deduct: true,
-                isEssential: true, // Balance corrections usually deemed essential
                 date: Timestamp.now(), 
                 dateString: new Date().toISOString().split('T')[0] 
             });
@@ -477,7 +433,6 @@
         if(currentMode === 'debt') { debtType = document.querySelector('input[name="debtType"]:checked').value; cat='Debt'; }
         
         const deduct = document.getElementById('deduct-check').checked;
-        const isEssential = document.getElementById('essential-check').checked; // Capture Value
         const dateVal = document.getElementById('date-picker').value; 
 
         await addDoc(expensesCollection, {
@@ -489,15 +444,10 @@
             method: document.querySelector('input[name="method"]:checked').value,
             debtType, 
             deduct: currentMode === 'expense' ? deduct : true,
-            isEssential: currentMode === 'expense' ? isEssential : false, // Save Value
             date: Timestamp.fromDate(new Date(dateVal)), 
             dateString: dateVal 
         });
-        
-        // Reset Inputs
-        document.getElementById('desc').value = ''; 
-        document.getElementById('amount').value = '';
-        document.getElementById('essential-check').checked = false; // Reset toggle
+        document.getElementById('desc').value = ''; document.getElementById('amount').value = '';
     });
 
     function updateUI(items) {
@@ -521,16 +471,8 @@
             
             let nonDeductBadge = (i.type === 'expense' && i.deduct === false) ? '<span style="font-size:0.7rem; color:var(--text-secondary); background:var(--input-bg); padding:2px 6px; border-radius:4px; margin-left:5px;">(ND)</span>' : '';
             
-            // New Badge for Need vs Want
-            let typeBadge = '';
-            if(i.type === 'expense') {
-                typeBadge = i.isEssential 
-                    ? '<span style="font-size:0.7rem; color:var(--success); margin-left:5px;">⚡Need</span>'
-                    : '<span style="font-size:0.7rem; color:var(--warning); margin-left:5px;">🍿Want</span>';
-            }
-            
             const li = document.createElement('li');
-            li.innerHTML = `<div><span style="font-weight:700">${i.description}</span>${nonDeductBadge}${typeBadge}<br><small style="color:var(--text-secondary)">${i.dateObj.toLocaleDateString()} • ${i.category}</small></div>
+            li.innerHTML = `<div><span style="font-weight:700">${i.description}</span>${nonDeductBadge}<br><small style="color:var(--text-secondary)">${i.dateObj.toLocaleDateString()} • ${i.category}</small></div>
             <div><span style="color:${color}; font-weight:800">${prefix}₹${i.amount}</span> <button class="del-btn" data-id="${i.id}" style="border:none;background:none;cursor:pointer; font-size:1.1rem; color:var(--text-secondary); margin-left:5px;">&times;</button></div>`;
             list.appendChild(li);
         });
@@ -538,7 +480,7 @@
     }
 
     document.getElementById('export-btn').addEventListener('click', () => {
-        let csv = "Date,Desc,Amt,Deducted,Essential\n" + globalItems.map(i => `${i.dateString},${i.description},${i.amount},${i.deduct},${i.isEssential}`).join("\n");
+        let csv = "Date,Desc,Amt,Deducted\n" + globalItems.map(i => `${i.dateString},${i.description},${i.amount},${i.deduct}`).join("\n");
         const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download="data.csv"; a.click();
     });
 
