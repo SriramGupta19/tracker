@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FireTrack: Habits</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         /* UNIFORM THEME */
         :root {
             --primary: #6366f1;
-            --success: #10b981; /* Green for habits */
+            --success: #10b981; 
             --bg: #f8fafc;
             --card: #ffffff;
             --text: #0f172a;
@@ -76,14 +77,22 @@
             transition: transform 0.2s;
         }
         
-        .habit-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .habit-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
         .habit-title { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        
+        .badges { display: flex; gap: 5px; flex-direction: column; align-items: flex-end; }
+        
         .streak-badge { 
-            font-size: 0.75rem; font-weight: 700; background: rgba(16, 185, 129, 0.1); color: var(--success); 
+            font-size: 0.75rem; font-weight: 700; background: rgba(245, 158, 11, 0.1); color: #f59e0b; 
+            padding: 4px 8px; border-radius: 6px; 
+        }
+        
+        .consistency-badge {
+            font-size: 0.75rem; font-weight: 700; background: rgba(99, 102, 241, 0.1); color: var(--primary); 
             padding: 4px 8px; border-radius: 6px; 
         }
 
-        /* THE MATRIX (Mini Heatmap) */
+        /* MATRIX */
         .matrix-container {
             display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px;
         }
@@ -97,11 +106,9 @@
             border: 1px solid var(--border); cursor: pointer; transition: all 0.2s;
         }
         .day-sq:hover { border-color: var(--text-secondary); transform: scale(1.1); }
-        
-        /* THE GLOWING STATE */
         .day-sq.completed {
             background: var(--success); border-color: var(--success);
-            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); /* The "Glow" */
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
         }
         
         .check-btn {
@@ -113,7 +120,7 @@
         
         .check-btn.today-done {
             background: var(--success); color: white; border-color: var(--success);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); transform: translateY(-1px);
         }
 
         /* MODAL */
@@ -129,6 +136,11 @@
         input { 
             width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); 
             background: var(--bg); color: var(--text); outline: none; box-sizing: border-box; margin-bottom: 15px;
+        }
+
+        /* EMPTY STATE */
+        .empty-state {
+            grid-column: 1 / -1; text-align: center; padding: 50px 20px; color: var(--text-secondary);
         }
     </style>
 </head>
@@ -202,6 +214,19 @@
         onSnapshot(query(habitsCol, where("uid", "==", uid)), snap => {
             const grid = document.getElementById('habit-grid');
             grid.innerHTML = '';
+            
+            // Empty State
+            if (snap.empty) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size:3rem; margin-bottom:10px;">🌱</div>
+                        <h3>No habits tracked yet</h3>
+                        <p>Click "+ New Habit" to start your streak.</p>
+                    </div>
+                `;
+                return;
+            }
+
             snap.forEach(d => {
                 const h = {id: d.id, ...d.data()};
                 renderHabit(h, grid);
@@ -210,27 +235,31 @@
     }
 
     function renderHabit(h, container) {
-        // Calculate Streak
         const history = h.history || [];
         const todayStr = new Date().toISOString().split('T')[0];
         
-        // Simple Streak Calc (Consecutive days backwards from today)
+        // Streak Logic
         let streak = 0;
         let checkDate = new Date();
-        // Check if today is done, if not, check from yesterday for streak continuity
         if(!history.includes(todayStr)) checkDate.setDate(checkDate.getDate() - 1);
-        
         while(true) {
             const str = checkDate.toISOString().split('T')[0];
             if(history.includes(str)) { streak++; checkDate.setDate(checkDate.getDate() - 1); }
             else { break; }
         }
 
-        // Generate last 7 days for Matrix
+        // Consistency Logic (Last 30 Days)
+        let hits30 = 0;
+        for(let i=0; i<30; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i);
+            if(history.includes(d.toISOString().split('T')[0])) hits30++;
+        }
+        const consistency = Math.round((hits30 / 30) * 100);
+
+        // Matrix Logic
         let matrixHtml = '';
         for(let i=6; i>=0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
+            const d = new Date(); d.setDate(d.getDate() - i);
             const dStr = d.toISOString().split('T')[0];
             const isDone = history.includes(dStr);
             const dayName = d.toLocaleDateString('en-US', {weekday: 'narrow'});
@@ -251,7 +280,10 @@
             <div>
                 <div class="habit-header">
                     <div class="habit-title"><span>${h.icon}</span> ${h.name}</div>
-                    <div class="streak-badge">🔥 ${streak} Day Streak</div>
+                    <div class="badges">
+                        <div class="streak-badge">🔥 ${streak} Day Streak</div>
+                        <div class="consistency-badge">📈 ${consistency}% Monthly</div>
+                    </div>
                 </div>
                 <div class="matrix-container">
                     <div class="matrix-grid">${matrixHtml}</div>
@@ -268,13 +300,20 @@
         container.appendChild(card);
     }
 
-    // Toggle Function (Global)
+    // Toggle Function with Confetti
     window.toggleDate = async (id, dateStr, currentlyDone) => {
         const ref = doc(db, "habits", id);
-        if(currentlyDone) {
-            await updateDoc(ref, { history: arrayRemove(dateStr) });
-        } else {
+        
+        if(!currentlyDone) {
+            // TRIGGER CONFETTI
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
             await updateDoc(ref, { history: arrayUnion(dateStr) });
+        } else {
+            await updateDoc(ref, { history: arrayRemove(dateStr) });
         }
     };
 
@@ -295,7 +334,7 @@
         await addDoc(habitsCol, {
             uid: auth.currentUser.uid,
             name, icon,
-            history: [] // Array of YYYY-MM-DD strings
+            history: [] 
         });
         
         document.getElementById('h-name').value = '';
