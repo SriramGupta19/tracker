@@ -21,9 +21,7 @@
             --text-secondary: #64748b;
             --border: #e2e8f0;
             --input-bg: #f1f5f9;
-            /* Enhanced Shadow for Depth */
             --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
         }
 
         body.dark-mode {
@@ -38,7 +36,6 @@
             --border: #334155;
             --input-bg: #020617;
             --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-            --shadow-hover: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
         }
 
         body { 
@@ -71,7 +68,6 @@
         .card { 
             background: var(--card); padding: 1.5rem; border-radius: 16px; 
             box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 15px; 
-            transition: transform 0.2s, box-shadow 0.2s;
         }
         
         .bank-card { 
@@ -122,7 +118,7 @@
         .checkbox-wrapper input { width: auto; margin: 0; }
         .checkbox-wrapper label { font-size: 0.9rem; color: var(--text); font-weight: 500; cursor: pointer; }
 
-        /* --- CHART LAYOUT --- */
+        /* --- UPDATED CHART LAYOUT --- */
         .charts-container { 
             display: grid; 
             grid-template-columns: 1fr 1fr; /* Laptop: Side by Side */
@@ -130,9 +126,8 @@
             margin-bottom: 20px; 
         }
         
-        /* Mobile: Stack Vertically */
         @media (max-width: 900px) {
-            .charts-container { grid-template-columns: 1fr; }
+            .charts-container { grid-template-columns: 1fr; } /* Mobile: Stacked */
         }
         
         .chart-box { 
@@ -140,28 +135,38 @@
             padding: 20px; 
             border-radius: 16px; 
             border: 1px solid var(--border); 
-            /* Fixed Shadow */
             box-shadow: var(--shadow);
             
-            /* Flex Layout */
-            display: flex; 
-            flex-direction: column;
-            align-items: center;
-            min-height: 400px; /* Ensure sufficient height */
+            /* Changed from Flex to Block to fix mobile sizing */
+            display: block; 
+            min-height: auto; 
         }
         
         .chart-title {
-            align-self: flex-start;
-            margin: 0 0 20px 0;
-            font-size: 1rem;
+            margin: 0 0 15px 0;
+            font-size: 0.95rem;
             font-weight: 700;
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            text-align: left;
         }
 
-        .pie-wrapper { width: 100%; max-width: 320px; flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
-        .bar-wrapper { width: 100%; flex: 1; position: relative; }
+        /* Explicit heights ensure charts fit properly on all screens */
+        .pie-wrapper { 
+            width: 100%; 
+            height: 300px; 
+            position: relative; 
+            margin: 0 auto; 
+            display: flex; 
+            justify-content: center;
+        }
+        
+        .bar-wrapper { 
+            width: 100%; 
+            height: 300px; 
+            position: relative; 
+        }
 
         /* TREND CHART STYLES */
         .trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap:10px; }
