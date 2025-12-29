@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>FireTrack: Finance</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+
     <style>
         /* MODERN COLOR PALETTE */
         :root {
@@ -122,7 +125,6 @@
             margin-bottom: 20px; 
         }
         
-        /* Stack vertically on smaller screens */
         @media (max-width: 900px) {
             .charts-container { grid-template-columns: 1fr; }
         }
@@ -141,6 +143,16 @@
 
         .pie-wrapper { width: 100%; max-width: 350px; height: 100%; position: relative; margin: 0 auto; }
         .bar-wrapper { width: 100%; height: 100%; position: relative; }
+
+        /* TREND CHART STYLES */
+        .trend-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap:10px; }
+        .time-filters { display: flex; background: var(--input-bg); padding: 4px; border-radius: 10px; }
+        .filter-btn {
+            border: none; background: transparent; padding: 6px 12px; font-size: 0.8rem; font-weight: 700;
+            color: var(--text-secondary); cursor: pointer; border-radius: 8px; transition: 0.2s;
+        }
+        .filter-btn.active { background: var(--card); color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .trend-wrapper { width: 100%; height: 300px; position: relative; }
 
         /* HISTORY CONTROLS */
         .history-controls {
@@ -227,6 +239,21 @@
         </div>
 
         <div class="main-content">
+            <div class="card">
+                <div class="trend-header">
+                    <h3 style="margin:0; font-size:1.1rem;">Spending Trend</h3>
+                    <div class="time-filters">
+                        <button class="filter-btn active" onclick="setTrendRange('1M')">1M</button>
+                        <button class="filter-btn" onclick="setTrendRange('3M')">3M</button>
+                        <button class="filter-btn" onclick="setTrendRange('6M')">6M</button>
+                        <button class="filter-btn" onclick="setTrendRange('1Y')">1Y</button>
+                    </div>
+                </div>
+                <div class="trend-wrapper">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
             <div class="charts-container">
                 <div class="chart-box">
                     <div class="pie-wrapper">
@@ -263,7 +290,6 @@
     import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-    // --- PASTE YOUR FIREBASE CONFIG HERE ---
     const firebaseConfig = {
       apiKey: "AIzaSyDx8q_rUrJv9hLQvHxJmnZ0m39bkhBK-UU",
       authDomain: "firetrack-29d9e.firebaseapp.com",
@@ -281,18 +307,16 @@
     let currentMode = 'expense';
     const INITIAL_BALANCE = 1616.96;
     let globalItems = [];
-    let historyLimit = 1; // Default Limit
-    
-    // Global variable to hold current calculated balance for the edit feature
+    let historyLimit = 1;
     let currentCalculatedBalance = 0;
-
-    // Set Date Picker to Today
-    document.getElementById('date-picker').valueAsDate = new Date();
     
-    // Theme
+    // Trend Variables
+    let currentTrendRange = '1M';
+    let trendChartInstance = null;
+
+    document.getElementById('date-picker').valueAsDate = new Date();
     document.getElementById('theme-btn').addEventListener('click', () => document.body.classList.toggle('dark-mode'));
 
-    // Auth
     onAuthStateChanged(auth, user => {
         if(user) {
             document.getElementById('user-name').innerText = user.displayName ? user.displayName.split(' ')[0] : 'User';
@@ -306,7 +330,6 @@
         signOut(auth).then(() => window.location.href = 'index.html');
     });
 
-    // Tab Switching
     window.switchTab = (mode) => {
         currentMode = mode;
         const btn = document.getElementById('action-btn');
@@ -332,26 +355,22 @@
         }
     }
 
-    // Logic
     function loadData(uid) {
         onSnapshot(query(expensesCollection, where("uid", "==", uid)), snap => {
             const items = [];
             snap.forEach(d => items.push({ id: d.id, ...d.data(), dateObj: d.data().date.toDate() }));
-            
-            // Sort Newest -> Oldest for List
             items.sort((a,b) => b.dateObj - a.dateObj);
             globalItems = items;
             
             calculateStats(items);
             updateUI(items);
             updateCharts(items);
+            // Initial Trend Load
+            updateTrendChart(currentTrendRange);
         });
     }
 
-    // Search
     document.getElementById('search-input').addEventListener('input', () => updateUI(globalItems));
-
-    // History Limit Change
     document.getElementById('history-limit').addEventListener('change', (e) => {
         historyLimit = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
         updateUI(globalItems);
@@ -374,8 +393,6 @@
                 if(i.debtType === 'borrowed') balance += i.amount; 
                 if(i.debtType === 'lent' && i.method === 'UPI') balance -= i.amount; 
             }
-            // Logic for "Balance Correction" (It's typically logged as Income or Expense with 'Adjustment' cat)
-            
             if(i.type === 'expense') {
                 if(i.method === 'UPI') upi += i.amount;
                 if(i.method === 'Card') card += i.amount;
@@ -383,10 +400,7 @@
                 if(i.dateObj >= startWeek && i.category !== 'Adjustment') week += i.amount;
             }
         });
-
-        // Store for Edit Feature
         currentCalculatedBalance = balance;
-
         document.getElementById('bank-balance').innerText = balance.toLocaleString('en-IN');
         document.getElementById('week-amount').innerText = week.toLocaleString('en-IN');
         document.getElementById('month-amount').innerText = month.toLocaleString('en-IN');
@@ -394,32 +408,20 @@
         document.getElementById('card-total').innerText = card.toLocaleString('en-IN');
     }
 
-    // --- NEW: EDIT BALANCE FEATURE ---
     document.getElementById('edit-balance-btn').addEventListener('click', async () => {
         const userInput = prompt("Enter your ACTUAL current bank balance:", currentCalculatedBalance);
-        
         if (userInput !== null && !isNaN(parseFloat(userInput))) {
             const newBalance = parseFloat(userInput);
             const difference = newBalance - currentCalculatedBalance;
-            
             if (difference === 0) return alert("Balance is already correct!");
-
             const type = difference > 0 ? 'income' : 'expense';
             const amount = Math.abs(difference);
-
             await addDoc(expensesCollection, {
-                uid: auth.currentUser.uid, 
-                type: type, 
-                description: 'Balance Correction', 
-                amount: amount, 
-                category: 'Adjustment',
-                method: 'Other', 
-                debtType: null, 
-                deduct: true,
-                date: Timestamp.now(), 
-                dateString: new Date().toISOString().split('T')[0] 
+                uid: auth.currentUser.uid, type: type, description: 'Balance Correction', amount: amount, 
+                category: 'Adjustment', method: 'Other', debtType: null, deduct: true,
+                date: Timestamp.now(), dateString: new Date().toISOString().split('T')[0] 
             });
-            alert("Balance updated! A 'Balance Correction' transaction has been added.");
+            alert("Balance updated!");
         }
     });
 
@@ -437,16 +439,10 @@
         const dateVal = document.getElementById('date-picker').value; 
 
         await addDoc(expensesCollection, {
-            uid: auth.currentUser.uid, 
-            type: currentMode, 
-            description: desc, 
-            amount, 
-            category: cat,
-            method: document.querySelector('input[name="method"]:checked').value,
-            debtType, 
+            uid: auth.currentUser.uid, type: currentMode, description: desc, amount, category: cat,
+            method: document.querySelector('input[name="method"]:checked').value, debtType, 
             deduct: currentMode === 'expense' ? deduct : true,
-            date: Timestamp.fromDate(new Date(dateVal)), 
-            dateString: dateVal 
+            date: Timestamp.fromDate(new Date(dateVal)), dateString: dateVal 
         });
         document.getElementById('desc').value = ''; document.getElementById('amount').value = '';
     });
@@ -454,24 +450,15 @@
     function updateUI(items) {
         const list = document.getElementById('expense-list');
         list.innerHTML = '';
-        
-        // 1. Filter by Search
         const term = document.getElementById('search-input').value.toLowerCase();
-        const filtered = items.filter(i => 
-            i.description.toLowerCase().includes(term) || 
-            (i.category && i.category.toLowerCase().includes(term))
-        );
-
-        // 2. Apply Limit
+        const filtered = items.filter(i => i.description.toLowerCase().includes(term) || (i.category && i.category.toLowerCase().includes(term)));
         const displayItems = historyLimit === 'all' ? filtered : filtered.slice(0, historyLimit);
 
         displayItems.forEach(i => {
             let color = 'var(--text)', prefix = '-';
             if(i.type === 'income' || (i.type === 'debt' && i.debtType === 'borrowed')) { color = 'var(--success)'; prefix='+'; }
             if(i.type === 'debt' && i.debtType === 'lent') color = 'var(--warning)';
-            
             let nonDeductBadge = (i.type === 'expense' && i.deduct === false) ? '<span style="font-size:0.7rem; color:var(--text-secondary); background:var(--input-bg); padding:2px 6px; border-radius:4px; margin-left:5px;">(ND)</span>' : '';
-            
             const li = document.createElement('li');
             li.innerHTML = `<div><span style="font-weight:700">${i.description}</span>${nonDeductBadge}<br><small style="color:var(--text-secondary)">${i.dateObj.toLocaleDateString()} • ${i.category}</small></div>
             <div><span style="color:${color}; font-weight:800">${prefix}₹${i.amount}</span> <button class="del-btn" data-id="${i.id}" style="border:none;background:none;cursor:pointer; font-size:1.1rem; color:var(--text-secondary); margin-left:5px;">&times;</button></div>`;
@@ -485,15 +472,11 @@
         const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download="data.csv"; a.click();
     });
 
-    // Charts
     let catChart, dayChart;
     function updateCharts(items) {
         const expenses = items.filter(i => i.type === 'expense').sort((a,b) => a.dateObj - b.dateObj);
         const cats = {}; const days = {};
-        expenses.forEach(i => { 
-            cats[i.category] = (cats[i.category]||0)+i.amount; 
-            days[i.dateString] = (days[i.dateString]||0)+i.amount; 
-        });
+        expenses.forEach(i => { cats[i.category] = (cats[i.category]||0)+i.amount; days[i.dateString] = (days[i.dateString]||0)+i.amount; });
         
         if(catChart) catChart.destroy();
         if(dayChart) dayChart.destroy();
@@ -505,28 +488,104 @@
         const dayValues = Object.values(days).slice(-7);
         const currentBarColors = dayLabels.map((_, i) => barColors[i % barColors.length]);
 
-        // Pie Chart
         catChart = new Chart(document.getElementById('catChart'), { 
-            type: 'doughnut', 
-            data: { labels: Object.keys(cats), datasets: [{ data: Object.values(cats), backgroundColor: colors, borderWidth: 0 }] }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { padding: 20, boxWidth: 12 } } } 
-            } 
+            type: 'doughnut', data: { labels: Object.keys(cats), datasets: [{ data: Object.values(cats), backgroundColor: colors, borderWidth: 0 }] }, 
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { padding: 20, boxWidth: 12 } } } } 
         });
-        
-        // Bar Chart
         dayChart = new Chart(document.getElementById('dayChart'), { 
-            type: 'bar', 
-            data: { 
-                labels: dayLabels, 
-                datasets: [{ label: 'Daily', data: dayValues, backgroundColor: currentBarColors, borderRadius: 6 }] 
-            }, 
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true }, x: { grid: { display: false } } },
-                plugins: { legend: { display: false } }
-            } 
+            type: 'bar', data: { labels: dayLabels, datasets: [{ label: 'Daily', data: dayValues, backgroundColor: currentBarColors, borderRadius: 6 }] }, 
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }, plugins: { legend: { display: false } } } 
+        });
+    }
+
+    // --- NEW: TREND CHART LOGIC ---
+    window.setTrendRange = (range) => {
+        currentTrendRange = range;
+        // Update Buttons Visuals
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            if(btn.innerText === range) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+        updateTrendChart(range);
+    }
+
+    function updateTrendChart(range) {
+        if(trendChartInstance) trendChartInstance.destroy();
+        
+        const now = new Date();
+        const startDate = new Date();
+        
+        // Calculate start date based on range
+        if(range === '1M') startDate.setMonth(now.getMonth() - 1);
+        if(range === '3M') startDate.setMonth(now.getMonth() - 3);
+        if(range === '6M') startDate.setMonth(now.getMonth() - 6);
+        if(range === '1Y') startDate.setFullYear(now.getFullYear() - 1);
+
+        // 1. Filter Expenses
+        const filteredExpenses = globalItems.filter(i => 
+            i.type === 'expense' && i.dateObj >= startDate && i.dateObj <= now
+        ).sort((a,b) => a.dateObj - b.dateObj); // Sort Oldest to Newest for Line Chart
+
+        // 2. Aggregate Data by Date
+        const dataMap = {};
+        filteredExpenses.forEach(i => {
+            const d = i.dateString;
+            dataMap[d] = (dataMap[d] || 0) + i.amount;
+        });
+
+        // 3. Create Dataset (With simple linear points)
+        const labels = Object.keys(dataMap);
+        const data = Object.values(dataMap);
+
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        
+        // Gradient
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.5)'); // Primary color semi-transparent
+        gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
+
+        trendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Spending',
+                    data: data,
+                    borderColor: '#6366f1',
+                    backgroundColor: gradient,
+                    fill: true,
+                    tension: 0.4, // Smooth curve
+                    pointRadius: 2,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: range === '1M' ? 'day' : (range === '1Y' ? 'month' : 'week') },
+                        grid: { display: false }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
         });
     }
 </script>
