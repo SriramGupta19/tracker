@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FireTrack: MindMap</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        /* UNIFORM THEME */
+        :root {
+            --primary: #8b5cf6; /* Violet */
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --input-bg: #f1f5f9;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --radius: 16px;
+
+            /* MOOD COLORS */
+            --mood-1: #ef4444; /* Terrible (Red) */
+            --mood-2: #f97316; /* Bad (Orange) */
+            --mood-3: #94a3b8; /* Neutral (Slate) */
+            --mood-4: #2dd4bf; /* Good (Teal) */
+            --mood-5: #22c55e; /* Amazing (Green) */
+        }
+
+        body.dark-mode {
+            --primary: #a78bfa;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --input-bg: #020617;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        body { 
+            font-family: 'Inter', system-ui, sans-serif; 
+            background: var(--bg); color: var(--text); margin: 0; padding: 20px;
+            transition: 0.3s;
+        }
+
+        .container { max-width: 1000px; margin: 0 auto; }
+
+        /* NAVIGATION */
+        .nav-bar {
+            display: flex; justify-content: center; gap: 10px; margin-bottom: 30px;
+            background: var(--card); padding: 8px; border-radius: 50px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border);
+            width: fit-content; margin: 0 auto 30px auto;
+        }
+        .nav-link {
+            text-decoration: none; color: var(--text-secondary); font-weight: 600; 
+            padding: 8px 20px; border-radius: 40px; transition: 0.2s; font-size: 0.9rem;
+        }
+        .nav-link.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3); }
+
+        /* HEADER */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        
+        /* LOGGING BAR */
+        .mood-selector {
+            display: flex; gap: 10px; margin-bottom: 25px; justify-content: space-between;
+        }
+        .mood-btn {
+            flex: 1; background: var(--card); border: 1px solid var(--border);
+            border-radius: 16px; padding: 15px 5px; cursor: pointer; text-align: center;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: var(--shadow);
+        }
+        .mood-btn:hover { transform: translateY(-3px) scale(1.02); }
+        .mood-emoji { font-size: 2rem; margin-bottom: 5px; filter: grayscale(100%); transition: 0.2s; }
+        .mood-btn:hover .mood-emoji { filter: grayscale(0%); }
+        
+        .mood-label { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; }
+
+        /* HEATMAP GRID */
+        .grid-card {
+            background: var(--card); padding: 25px; border-radius: 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 20px;
+        }
+        .heatmap-container {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 8px;
+            margin-top: 15px;
+        }
+        .day-box {
+            aspect-ratio: 1; border-radius: 8px; background: var(--input-bg);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 0.7rem; color: rgba(255,255,255,0.8); font-weight: 700;
+            cursor: pointer; position: relative; border: 1px solid transparent;
+        }
+        .day-box:hover { transform: scale(1.1); z-index: 2; border-color: rgba(0,0,0,0.2); }
+        
+        .day-box.m-1 { background: var(--mood-1); }
+        .day-box.m-2 { background: var(--mood-2); }
+        .day-box.m-3 { background: var(--mood-3); }
+        .day-box.m-4 { background: var(--mood-4); }
+        .day-box.m-5 { background: var(--mood-5); }
+        
+        .day-tooltip {
+            position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: white; padding: 4px 8px; border-radius: 6px;
+            font-size: 0.7rem; white-space: nowrap; display: none; z-index: 10;
+        }
+        .day-box:hover .day-tooltip { display: block; }
+
+        /* CHART AREA */
+        .chart-box { height: 300px; width: 100%; }
+        
+        /* RECENT LOGS */
+        .log-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; border-bottom: 1px solid var(--border);
+        }
+        .log-time { font-size: 0.8rem; color: var(--text-secondary); }
+        .log-note { font-size: 0.9rem; margin-left: 10px; color: var(--text); }
+        
+        /* Stats */
+        .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: var(--card); padding: 15px; border-radius: 12px; border: 1px solid var(--border); text-align: center; }
+        .stat-val { font-size: 1.5rem; font-weight: 800; margin-top: 5px; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="nav-bar">
+        <a href="finance.html" class="nav-link">💰 Finance</a>
+        <a href="fitness.html" class="nav-link">💪 Fitness</a>
+        <a href="habits.html" class="nav-link">⚡ Habits</a>
+        <a href="mood.html" class="nav-link active">🧠 MindMap</a>
+    </div>
+
+    <div class="header">
+        <div>
+            <h2 style="margin:0;">MindMap</h2>
+            <small style="color:var(--text-secondary)">Track your mental weather.</small>
+        </div>
+        <button id="theme-btn" style="background:var(--card); border:1px solid var(--border); border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:1.2rem;">🌙</button>
+    </div>
+
+    <div class="mood-selector">
+        <div class="mood-btn" onclick="logMood(1)">
+            <div class="mood-emoji" style="filter: grayscale(0%);">🤬</div>
+            <div class="mood-label" style="color:var(--mood-1)">Terrible</div>
+        </div>
+        <div class="mood-btn" onclick="logMood(2)">
+            <div class="mood-emoji" style="filter: grayscale(0%);">☹️</div>
+            <div class="mood-label" style="color:var(--mood-2)">Bad</div>
+        </div>
+        <div class="mood-btn" onclick="logMood(3)">
+            <div class="mood-emoji" style="filter: grayscale(0%);">😐</div>
+            <div class="mood-label" style="color:var(--mood-3)">Neutral</div>
+        </div>
+        <div class="mood-btn" onclick="logMood(4)">
+            <div class="mood-emoji" style="filter: grayscale(0%);">🙂</div>
+            <div class="mood-label" style="color:var(--mood-4)">Good</div>
+        </div>
+        <div class="mood-btn" onclick="logMood(5)">
+            <div class="mood-emoji" style="filter: grayscale(0%);">🤩</div>
+            <div class="mood-label" style="color:var(--mood-5)">Amazing</div>
+        </div>
+    </div>
+    <input type="text" id="mood-note" placeholder="Optional: Why do you feel this way?" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--input-bg); margin-bottom:20px; color:var(--text); box-sizing: border-box;">
+
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="mood-label">Average Mood (30d)</div>
+            <div class="stat-val" id="avg-mood">--</div>
+        </div>
+        <div class="stat-card">
+            <div class="mood-label">Best Time of Day</div>
+            <div class="stat-val" id="best-time">--</div>
+        </div>
+    </div>
+
+    <div class="grid-card">
+        <h3 style="margin:0 0 15px 0;">Life in Pixels <small style="font-weight:400; color:var(--text-secondary)">(Daily Averages)</small></h3>
+        <div class="heatmap-container" id="heatmap"></div>
+    </div>
+
+    <div class="grid-card">
+        <h3 style="margin:0 0 15px 0;">Emotional Pulse <small style="font-weight:400; color:var(--text-secondary)">(All entries)</small></h3>
+        <div class="chart-box">
+            <canvas id="moodChart"></canvas>
+        </div>
+    </div>
+
+    <div class="grid-card">
+        <h3 style="margin:0 0 15px 0;">Recent Logs</h3>
+        <div id="log-list"></div>
+    </div>
+
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, query, where, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    // --- FIREBASE CONFIG ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyDx8q_rUrJv9hLQvHxJmnZ0m39bkhBK-UU",
+      authDomain: "firetrack-29d9e.firebaseapp.com",
+      projectId: "firetrack-29d9e",
+      storageBucket: "firetrack-29d9e.firebasestorage.app",
+      messagingSenderId: "901288643060",
+      appId: "1:901288643060:web:5ca6fbc4dd6fa4b6c851a1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const moodCol = collection(db, "moods");
+
+    // Theme Logic
+    if(localStorage.getItem('theme')==='dark') document.body.classList.add('dark-mode');
+    document.getElementById('theme-btn').addEventListener('click', ()=>{
+        document.body.classList.toggle('dark-mode');
+        localStorage.setItem('theme', document.body.classList.contains('dark-mode')?'dark':'light');
+    });
+
+    onAuthStateChanged(auth, user => {
+        if(user) { loadMoods(user.uid); } 
+        else { window.location.href = 'index.html'; }
+    });
+
+    // --- LOGGING ---
+    window.logMood = async (level) => {
+        const note = document.getElementById('mood-note').value;
+        
+        await addDoc(moodCol, {
+            uid: auth.currentUser.uid,
+            level: level,
+            note: note,
+            timestamp: Timestamp.now()
+        });
+
+        document.getElementById('mood-note').value = '';
+        
+        // Quick visual feedback
+        alert(`Mood logged: ${getEmoji(level)}`);
+    }
+
+    function loadMoods(uid) {
+        onSnapshot(query(moodCol, where("uid", "==", uid)), snap => {
+            const items = [];
+            snap.forEach(d => items.push({ id: d.id, ...d.data(), dateObj: d.data().timestamp.toDate() }));
+            
+            // Sort: Newest first for list, Oldest first for charts
+            const sortedNew = [...items].sort((a,b) => b.dateObj - a.dateObj);
+            const sortedOld = [...items].sort((a,b) => a.dateObj - b.dateObj);
+
+            renderList(sortedNew);
+            renderGrid(sortedOld); // Pass oldest first to build calendar
+            renderChart(sortedOld);
+            calcStats(items);
+        });
+    }
+
+    // --- RENDER PIXEL GRID (HEATMAP) ---
+    function renderGrid(items) {
+        const grid = document.getElementById('heatmap');
+        grid.innerHTML = '';
+        
+        // Group by Date (YYYY-MM-DD)
+        const dayMap = {};
+        items.forEach(i => {
+            const dateStr = i.dateObj.toISOString().split('T')[0];
+            if(!dayMap[dateStr]) dayMap[dateStr] = { sum: 0, count: 0 };
+            dayMap[dateStr].sum += i.level;
+            dayMap[dateStr].count++;
+        });
+
+        // Generate last 28 days (4 weeks)
+        const today = new Date();
+        for(let i=27; i>=0; i--) {
+            const d = new Date();
+            d.setDate(today.getDate() - i);
+            const dStr = d.toISOString().split('T')[0];
+            
+            let avg = 0;
+            if(dayMap[dStr]) {
+                avg = Math.round(dayMap[dStr].sum / dayMap[dStr].count);
+            }
+
+            const box = document.createElement('div');
+            box.className = `day-box m-${avg}`;
+            // Show day number
+            box.innerHTML = `
+                ${d.getDate()}
+                <div class="day-tooltip">${d.toLocaleDateString()} - Avg: ${getEmoji(avg) || 'N/A'}</div>
+            `;
+            grid.appendChild(box);
+        }
+    }
+
+    // --- CHART LOGIC ---
+    let moodChart;
+    function renderChart(items) {
+        if(moodChart) moodChart.destroy();
+        
+        const ctx = document.getElementById('moodChart').getContext('2d');
+        const dataPoints = items.map(i => ({ x: i.dateObj, y: i.level }));
+
+        moodChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Mood',
+                    data: dataPoints,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointBackgroundColor: dataPoints.map(p => getColor(p.y))
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { type: 'time', time: { unit: 'day' }, grid: { display: false } },
+                    y: { 
+                        min: 0.5, max: 5.5, 
+                        ticks: { callback: (val) => getEmoji(val) },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    // --- STATS LOGIC ---
+    function calcStats(items) {
+        if(items.length === 0) return;
+        
+        // Average
+        const sum = items.reduce((a, b) => a + b.level, 0);
+        const avg = (sum / items.length).toFixed(1);
+        document.getElementById('avg-mood').innerHTML = `${avg} ${getEmoji(Math.round(avg))}`;
+        document.getElementById('avg-mood').style.color = getColor(Math.round(avg));
+
+        // Best Time of Day
+        // Group by Hour (0-23)
+        const hourMap = {}; 
+        items.forEach(i => {
+            const h = i.dateObj.getHours();
+            if(!hourMap[h]) hourMap[h] = { sum:0, count:0 };
+            hourMap[h].sum += i.level;
+            hourMap[h].count++;
+        });
+
+        let bestHour = -1;
+        let maxAvg = 0;
+        
+        for (const [h, data] of Object.entries(hourMap)) {
+            const hAvg = data.sum / data.count;
+            if(hAvg > maxAvg) { maxAvg = hAvg; bestHour = h; }
+        }
+        
+        if(bestHour !== -1) {
+            const suffix = bestHour >= 12 ? "PM" : "AM";
+            const displayH = bestHour % 12 || 12;
+            document.getElementById('best-time').innerText = `${displayH} ${suffix}`;
+        }
+    }
+
+    // --- HELPERS ---
+    function renderList(items) {
+        const list = document.getElementById('log-list');
+        list.innerHTML = '';
+        items.slice(0, 10).forEach(i => { // Show last 10
+            const div = document.createElement('div');
+            div.className = 'log-item';
+            div.innerHTML = `
+                <div style="display:flex; align-items:center;">
+                    <span style="font-size:1.5rem;">${getEmoji(i.level)}</span>
+                    <span class="log-note">${i.note || ''}</span>
+                </div>
+                <div>
+                    <span class="log-time">${i.dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <button onclick="deleteLog('${i.id}')" style="background:none; border:none; cursor:pointer; color:var(--text-secondary);">&times;</button>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    window.deleteLog = async (id) => {
+        if(confirm("Delete entry?")) await deleteDoc(doc(db, "moods", id));
+    };
+
+    function getEmoji(level) {
+        const map = { 1:'🤬', 2:'☹️', 3:'😐', 4:'🙂', 5:'🤩' };
+        return map[level] || '';
+    }
+    
+    function getColor(level) {
+        const map = { 1:'#ef4444', 2:'#f97316', 3:'#94a3b8', 4:'#2dd4bf', 5:'#22c55e' };
+        return map[level] || '#000';
+    }
+</script>
+</body>
+</html>
