@@ -233,7 +233,7 @@
                     </label>
                     <label class="bank-opt">
                         <input type="radio" name="bankAccount" value="Canara">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/cc/Canara_Bank_Logo.svg" class="bank-logo" alt="Canara">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Canara_Bank_Logo.svg/512px-Canara_Bank_Logo.svg.png" class="bank-logo" alt="Canara">
                         <span class="bank-name">Canara</span>
                     </label>
                 </div>
@@ -435,7 +435,7 @@
 
         document.getElementById('sbi-bal').innerText = sbi.toLocaleString('en-IN');
         document.getElementById('canara-bal').innerText = canara.toLocaleString('en-IN');
-        document.getElementById('bank-balance').innerText = (sbi + canara).toLocaleString('en-IN'); // Total Net Worth
+        document.getElementById('bank-balance').innerText = (sbi + canara).toLocaleString('en-IN'); 
         
         document.getElementById('week-amount').innerText = week.toLocaleString('en-IN');
         document.getElementById('month-amount').innerText = month.toLocaleString('en-IN');
@@ -456,7 +456,7 @@
                     uid: auth.currentUser.uid, type: diffSBI > 0 ? 'income' : 'expense',
                     description: 'Balance Correction (SBI)', amount: Math.abs(diffSBI),
                     category: 'Adjustment', method: 'Other', debtType: null, deduct: true,
-                    account: 'SBI', // Force Account
+                    account: 'SBI', 
                     date: Timestamp.now(), dateString: new Date().toISOString().split('T')[0] 
                 });
             }
@@ -473,7 +473,7 @@
                     uid: auth.currentUser.uid, type: diffCanara > 0 ? 'income' : 'expense',
                     description: 'Balance Correction (Canara)', amount: Math.abs(diffCanara),
                     category: 'Adjustment', method: 'Other', debtType: null, deduct: true,
-                    account: 'Canara', // Force Account
+                    account: 'Canara', 
                     date: Timestamp.now(), dateString: new Date().toISOString().split('T')[0] 
                 });
             }
