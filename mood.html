@@ -130,10 +130,10 @@
 
 <div class="container">
     <div class="nav-bar">
-        <a href="finance.html" class="nav-link">💰</a>
-        <a href="fitness.html" class="nav-link">💪</a>
-        <a href="habits.html" class="nav-link">⚡</a>
-        <a href="mood.html" class="nav-link active">🧠</a>
+        <a href="finance.html" class="nav-link">💰 Finance</a>
+        <a href="fitness.html" class="nav-link">💪 Fitness</a>
+        <a href="habits.html" class="nav-link">⚡ Habits</a>
+        <a href="mood.html" class="nav-link active">🧠 MindMap</a>
     </div>
 
     <div class="header">
@@ -147,18 +147,23 @@
     <div class="mood-selector">
         <div class="mood-btn" onclick="logMood(1)">
             <div class="mood-emoji" style="filter: grayscale(0%);">🤬</div>
+            <div class="mood-label" style="color:var(--mood-1)">Terrible</div>
         </div>
         <div class="mood-btn" onclick="logMood(2)">
             <div class="mood-emoji" style="filter: grayscale(0%);">☹️</div>
+            <div class="mood-label" style="color:var(--mood-2)">Bad</div>
         </div>
         <div class="mood-btn" onclick="logMood(3)">
             <div class="mood-emoji" style="filter: grayscale(0%);">😐</div>
+            <div class="mood-label" style="color:var(--mood-3)">Neutral</div>
         </div>
         <div class="mood-btn" onclick="logMood(4)">
             <div class="mood-emoji" style="filter: grayscale(0%);">🙂</div>
+            <div class="mood-label" style="color:var(--mood-4)">Good</div>
         </div>
         <div class="mood-btn" onclick="logMood(5)">
             <div class="mood-emoji" style="filter: grayscale(0%);">🤩</div>
+            <div class="mood-label" style="color:var(--mood-5)">Amazing</div>
         </div>
     </div>
     <input type="text" id="mood-note" placeholder="Optional: Why do you feel this way?" style="width:100%; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--input-bg); margin-bottom:20px; color:var(--text); box-sizing: border-box;">
@@ -258,7 +263,7 @@
         });
     }
 
-    // --- RENDER PIXEL GRID (HEATMAP) ---
+    // --- RENDER PIXEL GRID (HEATMAP - DYNAMIC MONTH) ---
     function renderGrid(items) {
         const grid = document.getElementById('heatmap');
         grid.innerHTML = '';
@@ -272,12 +277,21 @@
             dayMap[dateStr].count++;
         });
 
-        // Generate last 28 days (4 weeks)
+        // Current Month Logic
         const today = new Date();
-        for(let i=27; i>=0; i--) {
-            const d = new Date();
-            d.setDate(today.getDate() - i);
-            const dStr = d.toISOString().split('T')[0];
+        const year = today.getFullYear();
+        const month = today.getMonth(); // 0-11
+        const daysInMonth = new Date(year, month + 1, 0).getDate(); // Get last day of this month
+
+        // Loop from Day 1 to DaysInMonth
+        for(let d = 1; d <= daysInMonth; d++) {
+            const currentDay = new Date(year, month, d);
+            
+            // Build date string manually to avoid Timezone offset issues
+            // (Using local year, month, day to construct YYYY-MM-DD)
+            const mm = String(month + 1).padStart(2, '0');
+            const dd = String(d).padStart(2, '0');
+            const dStr = `${year}-${mm}-${dd}`;
             
             let avg = 0;
             if(dayMap[dStr]) {
@@ -286,10 +300,13 @@
 
             const box = document.createElement('div');
             box.className = `day-box m-${avg}`;
-            // Show day number
+            
+            // Highlight Today
+            if(d === today.getDate()) box.style.border = "2px solid var(--text)";
+
             box.innerHTML = `
-                ${d.getDate()}
-                <div class="day-tooltip">${d.toLocaleDateString()} - Avg: ${getEmoji(avg) || 'N/A'}</div>
+                ${d}
+                <div class="day-tooltip">${d}/${mm} - Avg: ${getEmoji(avg) || 'N/A'}</div>
             `;
             grid.appendChild(box);
         }
