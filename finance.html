@@ -233,7 +233,7 @@
                     </label>
                     <label class="bank-opt">
                         <input type="radio" name="bankAccount" value="Canara">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Canara_Bank_Logo.svg/512px-Canara_Bank_Logo.svg.png" class="bank-logo" alt="Canara">
+                        <img src="CANBK.NS-94324ae3.png" class="bank-logo" alt="Canara">
                         <span class="bank-name">Canara</span>
                     </label>
                 </div>
@@ -456,7 +456,7 @@
                     uid: auth.currentUser.uid, type: diffSBI > 0 ? 'income' : 'expense',
                     description: 'Balance Correction (SBI)', amount: Math.abs(diffSBI),
                     category: 'Adjustment', method: 'Other', debtType: null, deduct: true,
-                    account: 'SBI', 
+                    account: 'SBI', // Force Account
                     date: Timestamp.now(), dateString: new Date().toISOString().split('T')[0] 
                 });
             }
@@ -473,7 +473,7 @@
                     uid: auth.currentUser.uid, type: diffCanara > 0 ? 'income' : 'expense',
                     description: 'Balance Correction (Canara)', amount: Math.abs(diffCanara),
                     category: 'Adjustment', method: 'Other', debtType: null, deduct: true,
-                    account: 'Canara', 
+                    account: 'Canara', // Force Account
                     date: Timestamp.now(), dateString: new Date().toISOString().split('T')[0] 
                 });
             }
