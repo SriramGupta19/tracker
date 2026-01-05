@@ -94,7 +94,8 @@
         }
         
         .heatmap-grid {
-            display: grid; grid-template-rows: repeat(7, 12px); grid-auto-flow: column; gap: 4px; flex-shrink: 0;
+            /* CHANGED TO 6 ROWS (Mon-Sat) */
+            display: grid; grid-template-rows: repeat(6, 12px); grid-auto-flow: column; gap: 4px; flex-shrink: 0;
         }
         .day-sq {
             width: 12px; height: 12px; background-color: var(--heat-0);
@@ -201,6 +202,24 @@
             text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
         }
         .scoop-btn:hover { transform: scale(1.25); }
+
+        /* INTENSITY METER STYLES */
+        .burn-btn {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 10px; border-radius: 12px; border: 1px solid var(--border);
+            cursor: pointer; transition: all 0.2s; opacity: 0.6;
+        }
+        .burn-btn:hover { transform: translateY(-2px); opacity: 1; }
+        .burn-btn.active {
+            opacity: 1; background: var(--btn-color); border-color: var(--btn-color);
+            box-shadow: 0 4px 15px var(--btn-color);
+        }
+        .burn-btn.active div { color: white !important; opacity: 1 !important; }
+        
+        li.border-Low { border-left: 4px solid #10b981; }
+        li.border-Med { border-left: 4px solid #3b82f6; }
+        li.border-High { border-left: 4px solid #f59e0b; }
+        li.border-Max { border-left: 4px solid #ef4444; }
     </style>
 </head>
 <body>
@@ -210,7 +229,7 @@
         <a href="finance.html" class="nav-link">💰</a>
         <a href="fitness.html" class="nav-link active">💪</a>
         <a href="habits.html" class="nav-link">⚡</a>
-        <a href="mood.html" class="nav-link">🧠</a>
+        <a href="habits.html" class="nav-link">🧠</a>
     </div>
 
     <div class="header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -240,7 +259,7 @@
     <div class="card">
         <h3 style="margin:0 0 15px 0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
             <span>📅 Consistency</span>
-            <span style="font-size:0.75rem; font-weight:normal; color:var(--text-secondary);">(Last 365 Days)</span>
+            <span style="font-size:0.75rem; font-weight:normal; color:var(--text-secondary);">(Last 365 Days • Sundays excluded)</span>
         </h3>
         
         <div class="heatmap-container">
@@ -312,6 +331,25 @@
             <input type="hidden" id="scoop-val" value="0">
         </div>
 
+        <div class="protein-tracker" style="margin-top:10px;">
+            <div class="protein-title">Session Intensity</div>
+            <div class="scoop-grid" style="gap:10px; width:100%;">
+                <div class="burn-btn" onclick="setIntensity('Low')" style="--btn-color: #10b981;">
+                    <div style="font-size:1.5rem;">😌</div><div style="font-size:0.6rem; font-weight:700; opacity:0.7;">Light</div>
+                </div>
+                <div class="burn-btn" onclick="setIntensity('Med')" style="--btn-color: #3b82f6;">
+                    <div style="font-size:1.5rem;">💪</div><div style="font-size:0.6rem; font-weight:700; opacity:0.7;">Solid</div>
+                </div>
+                <div class="burn-btn" onclick="setIntensity('High')" style="--btn-color: #f59e0b;">
+                    <div style="font-size:1.5rem;">🔥</div><div style="font-size:0.6rem; font-weight:700; opacity:0.7;">Hard</div>
+                </div>
+                <div class="burn-btn" onclick="setIntensity('Max')" style="--btn-color: #ef4444;">
+                    <div style="font-size:1.5rem;">💀</div><div style="font-size:0.6rem; font-weight:700; opacity:0.7;">Limit</div>
+                </div>
+            </div>
+            <input type="hidden" id="intensity-val" value="">
+        </div>
+
         <input type="text" id="notes" placeholder="Notes (e.g. Bench PR 80kg)">
         <button id="add-btn" class="add-btn">Log Entry</button>
     </div>
@@ -320,11 +358,9 @@
         <div class="chart-box weight-chart-box">
             <div class="bar-wrapper"><canvas id="weightChart"></canvas></div>
         </div>
-        
         <div class="chart-box">
             <div class="pie-wrapper"><canvas id="consistChart"></canvas></div>
         </div>
-        
         <div class="chart-box">
             <div class="bar-wrapper"><canvas id="muscleChart"></canvas></div>
         </div>
@@ -354,7 +390,6 @@
     const auth = getAuth(app);
     const workoutsCollection = collection(db, "workouts");
 
-    // Global variable to store all workouts for "Contextual Memory"
     let globalWorkouts = [];
 
     const now = new Date();
@@ -363,17 +398,12 @@
 
     document.getElementById('theme-btn').addEventListener('click', () => document.body.classList.toggle('dark-mode'));
 
-    // --- NEW: SCOOP LOGIC ---
+    // --- SCOOP LOGIC ---
     window.setScoops = (n) => {
         const current = parseInt(document.getElementById('scoop-val').value);
         let newVal = n;
-        
-        // Toggle off if clicking the same number again
         if (current === n) newVal = 0;
-
         document.getElementById('scoop-val').value = newVal;
-        
-        // Update Visuals
         const scoops = document.querySelectorAll('.scoop-btn');
         scoops.forEach((s, index) => {
             if(index < newVal) s.classList.add('filled');
@@ -381,37 +411,35 @@
         });
     }
 
-    // --- SMART CHIP TOGGLE (Contextual Memory) ---
+    // --- INTENSITY LOGIC ---
+    window.setIntensity = (val) => {
+        document.getElementById('intensity-val').value = val;
+        document.querySelectorAll('.burn-btn').forEach(b => {
+            if(b.getAttribute('onclick').includes(val)) b.classList.add('active');
+            else b.classList.remove('active');
+        });
+    }
+
+    // --- SMART CHIP TOGGLE ---
     window.toggleChip = (el) => { 
-        // 1. Toggle Visuals
         el.classList.toggle('active'); 
-        
-        // 2. Identify Selected Muscle
         const muscle = el.innerText;
         const isActive = el.classList.contains('active');
         const box = document.getElementById('context-memory');
         const text = document.getElementById('memory-text');
 
         if (!isActive) {
-            // If turning off, check if other chips are active. If not, hide box.
             const anyActive = document.querySelector('.chip.active');
             if(!anyActive) box.style.display = 'none';
             return;
         }
 
-        // 3. Search History for this Muscle
-        // Find the most recent workout that includes this muscle
         const lastLog = globalWorkouts.find(w => w.muscles && w.muscles.includes(muscle));
 
         if (lastLog) {
-            // Format Date
             const daysAgo = Math.floor((new Date() - lastLog.dateObj) / (1000 * 60 * 60 * 24));
             const dateStr = daysAgo === 0 ? "Today" : `${daysAgo} days ago`;
-            
-            // Format Note
             const noteContent = lastLog.notes ? `"${lastLog.notes}"` : "No notes logged.";
-            
-            // Show Hint
             text.innerHTML = `${dateStr} &bull; ${noteContent} ${lastLog.weight ? `(${lastLog.weight}kg)` : ''}`;
             box.style.display = 'block';
         } else {
@@ -429,11 +457,7 @@
         onSnapshot(query(workoutsCollection, where("uid", "==", uid)), snap => {
             const items = [];
             snap.forEach(d => items.push({ id: d.id, ...d.data(), dateObj: d.data().date.toDate() }));
-            
-            // Sort: Newest first
             items.sort((a,b) => b.dateObj - a.dateObj); 
-            
-            // Save to global for memory feature
             globalWorkouts = items;
             
             updateUI(items);
@@ -443,56 +467,67 @@
         });
     }
 
+    // --- SMART STREAK LOGIC ---
     function calculateStats(items) {
         const gymItems = items.filter(i => i.location === 'Gym');
-        
-        // 1. Total Workouts
         document.getElementById('total-val').innerText = gymItems.length;
 
-        // 2. This Month
         const currentMonth = new Date().getMonth();
         const currentYear = new Date().getFullYear();
         const monthCount = gymItems.filter(i => i.dateObj.getMonth() === currentMonth && i.dateObj.getFullYear() === currentYear).length;
         document.getElementById('month-val').innerText = monthCount;
 
-        // 3. Streak Logic
+        // Smart Streak: Bridges Sundays
         const uniqueDates = [...new Set(gymItems.map(i => i.dateString))].sort().reverse();
         let streak = 0;
+        
         if(uniqueDates.length > 0) {
             const today = new Date().toISOString().split('T')[0];
             const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-            if(uniqueDates[0] === today || uniqueDates[0] === yesterday) {
+            
+            const lastWorkout = new Date(uniqueDates[0]);
+            const diffDays = Math.floor((new Date() - lastWorkout) / (1000 * 60 * 60 * 24));
+            
+            let isActive = diffDays <= 1; 
+            if(diffDays === 2 && new Date().getDay() <= 2) isActive = true;
+
+            if(isActive) {
                 streak = 1;
                 for(let i = 0; i < uniqueDates.length - 1; i++) {
                     const d1 = new Date(uniqueDates[i]);
                     const d2 = new Date(uniqueDates[i+1]);
-                    if(Math.ceil(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24)) === 1) streak++; else break;
+                    const diff = Math.ceil(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24));
+                    
+                    if(diff === 1) {
+                        streak++;
+                    } else if (diff === 2) {
+                        const gapDay = new Date(d1); 
+                        gapDay.setDate(d1.getDate() - 1);
+                        if (gapDay.getDay() === 0) streak++; // Sunday Bridge
+                        else break;
+                    } else {
+                        break;
+                    }
                 }
             }
         }
         document.getElementById('streak-val').innerText = streak;
 
-        // 4. BMI Calculation
         const lastWeightEntry = items.find(i => i.weight > 0);
         const bmiBox = document.getElementById('bmi-val');
-        
         if(lastWeightEntry) {
-            // !!! SET YOUR HEIGHT HERE (Meters) !!!
             const userHeight = 1.82; 
-
             const bmi = (lastWeightEntry.weight / (userHeight * userHeight)).toFixed(1);
             bmiBox.innerText = bmi;
-            
-            // Color Coding
-            if(bmi < 18.5) bmiBox.style.color = '#f59e0b'; // Underweight
-            else if(bmi < 25) bmiBox.style.color = '#10b981'; // Normal
-            else bmiBox.style.color = '#ef4444'; // Overweight
+            if(bmi < 18.5) bmiBox.style.color = '#f59e0b';
+            else if(bmi < 25) bmiBox.style.color = '#10b981';
+            else bmiBox.style.color = '#ef4444';
         } else {
             bmiBox.innerText = '--';
         }
     }
 
-    // --- HEATMAP & CHARTING ---
+    // --- HEATMAP (NO SUNDAYS) ---
     function renderHeatmap(items) {
         const grid = document.getElementById('heatmap'); grid.innerHTML = '';
         const activityMap = {};
@@ -500,10 +535,14 @@
 
         const today = new Date();
         const startDate = new Date(); startDate.setDate(today.getDate() - 364);
-        startDate.setDate(startDate.getDate() - startDate.getDay());
+        startDate.setDate(startDate.getDate() - startDate.getDay()); 
 
-        for (let i = 0; i < 371; i++) {
+        for (let i = 0; i < 375; i++) {
             const d = new Date(startDate); d.setDate(startDate.getDate() + i);
+            
+            // Skip Sunday (Day 0)
+            if(d.getDay() === 0) continue;
+
             const dateStr = d.toISOString().split('T')[0];
             const count = activityMap[dateStr] || 0;
             let level = count > 2 ? 3 : (count > 1 ? 2 : (count > 0 ? 1 : 0));
@@ -521,25 +560,23 @@
         const time = document.getElementById('time-picker').value;
         const muscles = Array.from(document.querySelectorAll('.chip.active')).map(c => c.innerText);
         const dateVal = document.getElementById('date-picker').value;
-        // Get Scoops
         const scoopCount = parseInt(document.getElementById('scoop-val').value) || 0;
+        const intensity = document.getElementById('intensity-val').value || '';
 
         if(location !== 'Rest' && muscles.length === 0 && weight === 0 && scoopCount === 0) return alert("Enter details");
 
         await addDoc(workoutsCollection, {
             uid: auth.currentUser.uid, location, muscles, weight, time, 
-            scoops: scoopCount, // SAVE SCOOPS
+            scoops: scoopCount, intensity: intensity,
             notes: document.getElementById('notes').value,
             date: Timestamp.fromDate(new Date(dateVal)), dateString: dateVal
         });
 
-        // Reset
-        document.getElementById('notes').value = ''; 
-        document.getElementById('weight').value = '';
+        document.getElementById('notes').value = ''; document.getElementById('weight').value = '';
         document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
         document.getElementById('context-memory').style.display = 'none'; 
-        // Reset Scoops
         window.setScoops(0);
+        window.setIntensity('');
     });
 
     function updateUI(items) {
@@ -547,14 +584,13 @@
         items.slice(0, 30).forEach(i => {
             let tags = i.location === 'Rest' ? `<span class="tag-pill" style="color:var(--text-secondary);background:var(--input-bg)">Recovery</span>` : (i.muscles||[]).map(m=>`<span class="tag-pill">${m}</span>`).join('');
             
-            // Render Scoop Visuals
             let scoopIcons = '';
-            if(i.scoops && i.scoops > 0) {
-                // Repeat spoon emoji based on count
-                scoopIcons = '<span style="font-size:0.9rem; margin-left:8px;">' + '🥄'.repeat(i.scoops) + '</span>';
-            }
+            if(i.scoops && i.scoops > 0) scoopIcons = '<span style="font-size:0.9rem; margin-left:8px;">' + '🥄'.repeat(i.scoops) + '</span>';
 
             const li = document.createElement('li');
+            const intensityClass = i.intensity ? `border-${i.intensity}` : '';
+            li.className = intensityClass;
+
             li.innerHTML = `
                 <div style="width:100%">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
